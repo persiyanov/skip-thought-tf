@@ -9,20 +9,35 @@ class Vocab(object):
     EOS_TOKEN = "<eos>"
     PAD_TOKEN = "<pad>"
     UNK_TOKEN = "<unk>"
+    START_VOCAB = [EOS_TOKEN, PAD_TOKEN, UNK_TOKEN]
 
     def __init__(self):
-        self.word_to_index = {}
-        self.index_to_word = {}
+        self.word2index = {}
+        self.index2word = {}
         self.word_freq = defaultdict(int)
         self.total_words = 0
-        self.add_words([Vocab.PAD_TOKEN, Vocab.EOS_TOKEN,
-                        Vocab.UNK_TOKEN])
+        self.add_words(Vocab.START_VOCAB)
+
+    def cut_by_freq(self, max_vocab_size):
+        """Removes all words except `max_vocab_size` most frequent ones.
+
+        Args:
+            max_vocab_size (int): Target vocabulary size.
+        """
+        for token in Vocab.START_VOCAB:
+            self.word_freq.pop(token, None)
+        self.word_freq = sorted(self.word_freq.items(), key=lambda x: x[1],
+                                reverse=True)[:max_vocab_size - len(Vocab.START_VOCAB)]
+        self.word_freq = dict(self.word_freq)
+        for token in Vocab.START_VOCAB:
+            self.word_freq[token] = 1
+        self._id_word_mappings_from_word_freq()
 
     def add_word(self, word, count=1):
-        if word not in self.word_to_index:
-            index = len(self.word_to_index)
-            self.word_to_index[word] = index
-            self.index_to_word[index] = word
+        if word not in self.word2index:
+            index = len(self.word2index)
+            self.word2index[word] = index
+            self.index2word[index] = word
         self.word_freq[word] += count
 
     def add_words(self, words):
@@ -30,9 +45,10 @@ class Vocab(object):
             self.add_word(word)
 
     def encode_word(self, word):
-        if word not in self.word_to_index:
-            word = Vocab.UNK_TOKEN
-        return self.word_to_index[word]
+        if word not in self.word2index:
+            return self.word2index[Vocab.UNK_TOKEN]
+        else:
+            return self.word2index[word]
 
     def encode_words(self, words, with_eos=False):
         encoded = []
@@ -42,25 +58,31 @@ class Vocab(object):
         return encoded
 
     def decode_idx(self, index):
-        return self.index_to_word[index]
+        return self.index2word[index]
 
     def decode_idxs(self, indices):
         return [self.decode_idx(idx) for idx in indices]
+
+    def _id_word_mappings_from_word_freq(self):
+        words = self.word_freq.keys()
+        self.index2word = dict(enumerate(words))
+        self.word2index = {v: k for k, v in self.index2word.items()}
 
     def __len__(self):
         return len(self.word_freq)
 
     def __contains__(self, item):
-        return item in self.word_to_index
+        return item in self.word2index
 
 
 class SequenceDataReader(object):
     def __init__(self, fname,
                  line_process_fn=lambda x: x.lower().strip(),
-                 verbose=10000):
+                 max_vocab_size=100000, verbose=10000):
         self._verbose = verbose
         self._logger = logging.getLogger(__name__)
         self.fname = fname
+        self.max_vocab_size = max_vocab_size
         self._line_process_fn = line_process_fn
         self._build_vocabulary_and_stats()
         self._build_dataset()
@@ -82,6 +104,7 @@ class SequenceDataReader(object):
                 if self.total_lines % self._verbose == 0:
                     self._logger.warning("Read\t{0} lines.".format(
                         self.total_lines))
+        self.vocab.cut_by_freq(self.max_vocab_size)
 
     def _build_dataset(self):
         """
