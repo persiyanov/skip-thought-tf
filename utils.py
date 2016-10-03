@@ -81,7 +81,8 @@ def get_weights_for_sequence_loss(data, pad_value, dtype=np.float32):
     Returns:
         object (numpy.array): Array shaped like `data`.
     """
-    return (data != pad_value).astype(dtype)
+    mask = (data != pad_value).astype(dtype)
+    return [mask[:, i] for i in range(mask.shape[1])]
 
 
 def data_iterator(orig_X, orig_y=None, batch_size=64,
