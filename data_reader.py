@@ -9,7 +9,8 @@ class Vocab(object):
     EOS_TOKEN = "<eos>"
     PAD_TOKEN = "<pad>"
     UNK_TOKEN = "<unk>"
-    START_VOCAB = [EOS_TOKEN, PAD_TOKEN, UNK_TOKEN]
+    GO_TOKEN = "<go>"
+    START_VOCAB = [EOS_TOKEN, PAD_TOKEN, UNK_TOKEN, GO_TOKEN]
 
     def __init__(self):
         self.word2index = {}
@@ -50,8 +51,10 @@ class Vocab(object):
         else:
             return self.word2index[word]
 
-    def encode_words(self, words, with_eos=False):
+    def encode_words(self, words, with_eos=False, with_go=False):
         encoded = []
+        if with_go:
+            encoded.append(self.encode_word(Vocab.GO_TOKEN))
         encoded.extend([self.encode_word(w) for w in words])
         if with_eos:
             encoded.append(self.encode_word(Vocab.EOS_TOKEN))
