@@ -153,15 +153,15 @@ def seq2seq_data_iterator(orig_X, orig_y, batch_size=64, shuffle=False,
     """
     if shuffle:
         indices = np.random.permutation(len(orig_X))
-        data_X = list(np.array(orig_X)[indices])
-        data_y = list(np.array(orig_y)[indices])
+        data_X = [orig_X[i] for i in indices]
+        data_y = [orig_y[i] for i in indices]
     else:
         data_X = orig_X
         data_y = orig_y
 
     total_processed_examples = 0
     total_steps = int(np.ceil(len(data_X)) / float(batch_size))
-    for step in range(total_steps):
+    for step in range(total_steps+1):
         batch_start = step * batch_size
         x = data_X[batch_start:batch_start + batch_size]
         x_seq_lengths = sequence_lengths(x)
@@ -176,4 +176,52 @@ def seq2seq_data_iterator(orig_X, orig_y, batch_size=64, shuffle=False,
     # Sanity check to make sure we iterated over all the dataset as intended
     assert total_processed_examples == len(data_X), \
         'Expected {} and processed {}'.format(len(data_X),
+                                              total_processed_examples)
+
+
+def seq2seq_triples_data_iterator(curr_data, prev_data, next_data, max_len,
+                                  batch_size=64, shuffle=False, pad_value=0):
+    """Creates iterator for (current sentence, prev sentence, next sentence)
+    data. Is is useful for training skip-thought vectors.
+
+    Args:
+        curr_data (list of lists of ints): List with encoded current
+            sentences. Lines can be with different lengths.
+        prev_data (list of lists of ints): List with encoded  previous
+            lines. Lines can be with different lengths.
+        next_data (list of lists of ints): List with encoded next lines.
+            Lines can be with different lengths.
+        max_len (int): Maximum length for padding previous and next sentences.
+        batch_size (int): Size of batch.
+        shuffle (bool): Whether to shuffle data or not.
+        pad_value (int): Padding value.
+
+    """
+    if shuffle:
+        indices = np.random.permutation(len(curr_data))
+        curr_data = [curr_data[i] for i in indices]
+        prev_data = [prev_data[i] for i in indices]
+        next_data = [next_data[i] for i in indices]
+
+    total_processed_examples = 0
+    total_steps = int(np.ceil(len(curr_data)) / float(batch_size))
+    for step in range(total_steps+1):
+        batch_start = step * batch_size
+        curr = curr_data[batch_start:batch_start + batch_size]
+        x_seq_lengths = sequence_lengths(curr)
+        curr = pad_sequences(curr, max(x_seq_lengths), pad_value)
+
+        prev = prev_data[batch_start:batch_start + batch_size]
+        prev = pad_sequences(prev, max_len, pad_value)
+
+        next = next_data[batch_start:batch_start + batch_size]
+        next = pad_sequences(next, max_len, pad_value)
+        yield curr.astype(np.int32),\
+              prev.astype(np.int32),\
+              next.astype(np.int32)
+
+        total_processed_examples += len(curr)
+    # Sanity check to make sure we iterated over all the dataset as intended
+    assert total_processed_examples == len(curr_data), \
+        'Expected {} and processed {}'.format(len(curr_data),
                                               total_processed_examples)
