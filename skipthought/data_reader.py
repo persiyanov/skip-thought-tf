@@ -1,8 +1,9 @@
+import logging
 from collections import defaultdict
 
-import utils
 import numpy as np
-import logging
+
+from skipthought import utils
 
 
 class Vocab(object):
