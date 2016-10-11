@@ -42,7 +42,7 @@ def padded_sequence_lengths(data, pad_value):
     models.
 
     Args:
-        data (numpy.array): Array with sequence word indices.
+        data (numpy.array): Array with sequence word indices aligned with pad_value.
         pad_value (float): Value used for padding sequences.
 
     Returns:

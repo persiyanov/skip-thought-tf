@@ -1,17 +1,45 @@
 import logging
 from collections import defaultdict
-
-import numpy as np
-
 from skipthought import utils
 
 
-class Vocab(object):
+class Batch:
+    def __init__(self, data, pad_value=None):
+        self.data = data
+        self.pad_value = pad_value
+
+        self._weights = None
+        self._seq_lengths = None
+        if self.pad_value is not None:
+            self._weights = utils.get_weights_for_sequence_loss(self.data, self.pad_value)
+            self._seq_lengths = utils.padded_sequence_lengths(self.data, self.pad_value)
+
+    def __getitem__(self, item):
+        return self.data[item]
+
+    def __repr__(self):
+        return self.data.__repr__()
+
+    @property
+    def weights(self):
+        assert self._weights is not None
+        return self._weights
+
+    @property
+    def seq_lengths(self):
+        assert self._weights is not None
+        return self._seq_lengths
+
+    @property
+    def shape(self):
+        return self.data.shape
+
+
+class Vocab:
     EOS_TOKEN = "<eos>"
     PAD_TOKEN = "<pad>"
     UNK_TOKEN = "<unk>"
-    GO_TOKEN = "<go>"
-    START_VOCAB = [EOS_TOKEN, PAD_TOKEN, UNK_TOKEN, GO_TOKEN]
+    START_VOCAB = [EOS_TOKEN, PAD_TOKEN, UNK_TOKEN]
 
     def __init__(self):
         self.word2index = {}
@@ -52,10 +80,8 @@ class Vocab(object):
         else:
             return self.word2index[word]
 
-    def encode_words(self, words, with_eos=False, with_go=False):
+    def encode_words(self, words, with_eos=False):
         encoded = []
-        if with_go:
-            encoded.append(self.encode_word(Vocab.GO_TOKEN))
         encoded.extend([self.encode_word(w) for w in words])
         if with_eos:
             encoded.append(self.encode_word(Vocab.EOS_TOKEN))
@@ -79,7 +105,7 @@ class Vocab(object):
         return item in self.word2index
 
 
-class SequenceDataReader(object):
+class SequenceDataReader:
     def __init__(self, fname,
                  line_process_fn=lambda x: x.lower().strip(),
                  max_vocab_size=100000, verbose=10000):
@@ -124,10 +150,12 @@ class SequenceDataReader(object):
                 self.max_len = max(self.max_len, len(encoded))
 
     def _encode(self, line):
-        """
-        Encodes processed line to list of word indices.
-        :param line: string
-        :return: list of integers
+        """Encodes processed line to list of word indices.
+
+        Args:
+            line (str): Raw line.
+        Returns:
+             encoded_words (list of ints): List of encoded words + encoded EOS_TOKEN at the end.
         """
         words = self._line_process_fn(line).split()
         return self.vocab.encode_words(words, with_eos=True)
@@ -138,19 +166,3 @@ class SequenceDataReader(object):
     def get_sequence_lengths(self):
         return utils.sequence_lengths(self.dataset)
 
-
-class IntDataReader(object):
-    def __init__(self, fname):
-        self.fname = fname
-        self._build_dataset()
-
-    def _build_dataset(self):
-        with open(self.fname) as f:
-            self.dataset = np.array([int(l.strip()) for l in f],
-                                    dtype=np.int32)
-
-    def get_data(self, one_hot=False):
-        if one_hot:
-            return utils.one_hot(self.dataset)
-        else:
-            return self.dataset

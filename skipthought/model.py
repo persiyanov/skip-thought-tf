@@ -1,17 +1,22 @@
 import math
 import tensorflow as tf
+import numpy as np
+
+from . import data_utils
 
 
-class SkipthoughtModel(object):
+class SkipthoughtModel:
+
     SUPPORTED_CELLTYPES = ['lstm', 'gru']
 
     def __init__(self, cell_type, num_hidden, embedding_size, max_vocab_size,
-                 learning_rate, decay_rate, grad_clip, max_length_decoder):
+                 learning_rate, decay_rate, decay_steps, grad_clip, max_length_decoder):
         self.cell_type = cell_type
         self.max_length_decoder = max_length_decoder
         self.grad_clip = grad_clip
         self.decay_rate = decay_rate
-        self.learning_rate = learning_rate
+        self.decay_steps = decay_steps
+        self.lr = learning_rate
         self.max_vocab_size = max_vocab_size
         self.embedding_size = embedding_size
         self.num_hidden = num_hidden
@@ -20,6 +25,10 @@ class SkipthoughtModel(object):
 
         self._create_placeholders()
         self._create_network()
+
+    def _check_args(self):
+        if self.cell_type not in self.SUPPORTED_CELLTYPES:
+            raise ValueError("This cell type is not supported.")
 
     def _create_placeholders(self):
         with tf.variable_scope('placeholders'):
@@ -33,12 +42,12 @@ class SkipthoughtModel(object):
             self.prev_decoder_weights = [tf.placeholder(tf.float32, shape=[None,], name="prev__decoder_weight{0}".format(i))
                                          for i in range(self.max_length_decoder)]
 
-            # self.next_decoder_input = [tf.placeholder(tf.int32, [None, ], name="next_decoder_input{0}".format(i))
-            #                            for i in range(self.max_length_decoder)]
-            # self.next_decoder_target = [tf.placeholder(tf.int32, [None, ], name="next_decoder_target{0}".format(i))
-            #                             for i in range(self.max_length_decoder)]
-            # self.next_decoder_weights = [tf.placeholder(tf.float32, shape=[None,], name="next__decoder_weight{0}".format(i))
-            #                              for i in range(self.max_length_decoder)]
+            self.next_decoder_input = [tf.placeholder(tf.int32, [None, ], name="next_decoder_input{0}".format(i))
+                                       for i in range(self.max_length_decoder)]
+            self.next_decoder_target = [tf.placeholder(tf.int32, [None, ], name="next_decoder_target{0}".format(i))
+                                        for i in range(self.max_length_decoder)]
+            self.next_decoder_weights = [tf.placeholder(tf.float32, shape=[None,], name="next__decoder_weight{0}".format(i))
+                                         for i in range(self.max_length_decoder)]
 
     def _create_network(self):
         with tf.variable_scope('embeddings'):
@@ -61,6 +70,7 @@ class SkipthoughtModel(object):
                                                               inputs=embedded,
                                                               sequence_length=self.encoder_seq_len)
 
+        loop_function_predict = tf.nn.seq2seq._extract_argmax_and_embed(self.embedding_matrix, update_embedding=False)
         with tf.variable_scope('prev_decoder'):
             embedded_prev = [tf.nn.embedding_lookup(self.embedding_matrix, inp) for inp in self.prev_decoder_input]
 
@@ -68,62 +78,95 @@ class SkipthoughtModel(object):
             cell = tf.nn.rnn_cell.OutputProjectionWrapper(cell, self.max_vocab_size)
 
             prev_decoder_outputs, _ = tf.nn.seq2seq.rnn_decoder(embedded_prev, initial_state=encoder_state,
-                                                                  cell=cell)
+                                                                cell=cell)
 
-        # with tf.variable_scope("next_decoder"):
-        #     embedded_next = [tf.nn.embedding_lookup(self.embedding_matrix, inp) for inp in self.next_decoder_input]
-        #
-        #     cell = cell_fn(self.num_hidden)
-        #     cell = tf.nn.rnn_cell.OutputProjectionWrapper(cell, self.max_vocab_size)
-        #
-        #     next_decoder_outputs, _ = tf.nn.seq2seq.rnn_decoder(embedded_next, initial_state=encoder_state,
-        #                                                           cell=cell)
+        with tf.variable_scope("prev_decoder", reuse=True):
+            prev_decoder_predict_logits, _ = tf.nn.seq2seq.rnn_decoder(embedded_prev, initial_state=encoder_state,
+                                                                       cell=cell, loop_function=loop_function_predict)
+
+        with tf.variable_scope("next_decoder"):
+            embedded_next = [tf.nn.embedding_lookup(self.embedding_matrix, inp) for inp in self.next_decoder_input]
+
+            cell = cell_fn(self.num_hidden)
+            cell = tf.nn.rnn_cell.OutputProjectionWrapper(cell, self.max_vocab_size)
+
+            next_decoder_outputs, _ = tf.nn.seq2seq.rnn_decoder(embedded_next, initial_state=encoder_state,
+                                                                cell=cell)
+
+        with tf.variable_scope("next_decoder", reuse=True):
+            next_decoder_predict_logits, _ = tf.nn.seq2seq.rnn_decoder(embedded_next, initial_state=encoder_state,
+                                                                       cell=cell, loop_function=loop_function_predict)
 
         self.prev_decoder_outputs = prev_decoder_outputs
-        # self.next_decoder_outputs = next_decoder_outputs
+        self.prev_decoder_predict_logits = prev_decoder_predict_logits
+        self.prev_decoder_predict = [tf.argmax(logit, 1) for logit in self.prev_decoder_predict_logits]
 
+        self.next_decoder_outputs = next_decoder_outputs
+        self.next_decoder_predict_logits = next_decoder_predict_logits
+        self.next_decoder_predict = [tf.argmax(logit, 1) for logit in self.next_decoder_predict_logits]
 
         loss_prev = tf.nn.seq2seq.sequence_loss(prev_decoder_outputs, self.prev_decoder_target, self.prev_decoder_weights)
-        # loss_next = tf.nn.seq2seq.sequence_loss(next_decoder_outputs, self.next_decoder_target, self.next_decoder_weights)
-        # self.loss = loss_prev + loss_next
-        self.loss = loss_prev
+        loss_next = tf.nn.seq2seq.sequence_loss(next_decoder_outputs, self.next_decoder_target, self.next_decoder_weights)
+        self.loss = loss_prev + loss_next
 
-        optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
         global_step = tf.Variable(0, trainable=False)
-        self.train_op = optimizer.minimize(self.loss,  global_step=global_step)
+        learning_rate = tf.train.exponential_decay(self.lr, global_step, self.decay_steps,
+                                                   self.decay_rate, staircase=True)
 
-    def _fill_feed_dict(self, curr, curr_seq_lengths,
-                        prev_input, prev_target, prev_weights,
-                        next_input, next_target, next_weights):
-        assert prev_input.shape == next_input.shape == prev_weights.shape == next_weights.shape
+        optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
+        tvars = tf.trainable_variables()
+        grads = tf.gradients(self.loss, tvars)
+        clipped_grads, _ = tf.clip_by_global_norm(grads, self.grad_clip)
+        self.train_op = optimizer.apply_gradients(zip(clipped_grads, tvars), global_step=global_step)
+
+    def _fill_feed_dict_train(self, curr,
+                              prev_input, prev_target,
+                              next_input, next_target):
+        """Fills feed dictionary.
+
+        Args:
+            curr (data_utils.Batch):
+            prev_input (data_reader.Batch):
+            prev_target (data_reader.Batch):
+            next_input (data_reader.Batch):
+            next_target (data_reader.Batch):
+        Returns:
+            feed_dict (dict): Feed dictionary.
+        """
+        assert prev_input.shape == prev_target.shape == next_input.shape == next_target.shape
         assert prev_input.shape[1] == self.max_length_decoder
         max_len = self.max_length_decoder
 
-        feed_dict = {self.encoder_input: curr, self.encoder_seq_len: curr_seq_lengths}
-        feed_dict.update({self.prev_decoder_input[i]: prev_input[:, i] for i in range(max_len)})
-        feed_dict.update({self.prev_decoder_target[i]: prev_target[:, i] for i in range(max_len)})
-        feed_dict.update({self.prev_decoder_weights[i]: prev_weights[:, i] for i in range(max_len)})
+        feed_dict = {self.encoder_input: curr.data, self.encoder_seq_len: curr.seq_lengths}
+        feed_dict.update({self.prev_decoder_input[i]: prev_input.data[:, i] for i in range(max_len)})
+        feed_dict.update({self.prev_decoder_target[i]: prev_target.data[:, i] for i in range(max_len)})
+        feed_dict.update({self.prev_decoder_weights[i]: prev_target.weights[:, i] for i in range(max_len)})
 
-        # feed_dict.update({self.next_decoder_input[i]: next_input[:, i] for i in range(max_len)})
-        # feed_dict.update({self.next_decoder_target[i]: next_target[:, i] for i in range(max_len)})
-        # feed_dict.update({self.next_decoder_weights[i]: next_weights[:, i] for i in range(max_len)})
+        feed_dict.update({self.next_decoder_input[i]: next_input.data[:, i] for i in range(max_len)})
+        feed_dict.update({self.next_decoder_target[i]: next_target.data[:, i] for i in range(max_len)})
+        feed_dict.update({self.next_decoder_weights[i]: next_target.weights[:, i] for i in range(max_len)})
         return feed_dict
 
-    def _check_args(self):
-        if self.cell_type not in self.SUPPORTED_CELLTYPES:
-            raise ValueError("This cell type is not supported.")
+    def _fill_feed_dict_predict(self, curr, eos_token):
+        feed_dict = {self.encoder_input: curr.data, self.encoder_seq_len: curr.seq_lengths,
+                     self.prev_decoder_input[0]: np.array([eos_token]),
+                     self.next_decoder_input[0]: np.array([eos_token])}
+        return feed_dict
 
     def train_step(self, curr, prev, next):
-        """
+        """Returns train_op, loss and feed_dict for performing sess.run(..) on them.
 
-        :param curr:
-        :param prev:
-        :param next:
-        :return:
+        Args:
+            curr (data_utils.Batch): Encoder input with a shape [batch_size, batch_length].
+                Batch length can vary from batch to batch.
+            prev (data_reader.Batch): Prev decoder input with a shape [batch_size, self.max_decoder_length]
+            next (data_reader.Batch): Next decoder input with a shape [batch_size, self.max_decoder_length]
+        Returns:
+            (self.train_op, self.loss, feed_dict)
         """
-        feed_dict = self._fill_feed_dict(curr, prev, next)
+        feed_dict = self._fill_feed_dict_train(curr, prev, next)
         return self.train_op, self.loss, feed_dict
 
-    # def predict_step(self, curr, prev, next):
-    #     feed_dict = self._fill_feed_dict(curr, prev, next)
-    #     return self.prev_decoder_outputs, self.next_decoder_outputs, feed_dict
+    def predict(self, curr, eos_token):
+        feed_dict = self._fill_feed_dict_predict(curr, eos_token)
+        return self.prev_decoder_predict, self.next_decoder_predict, feed_dict
