@@ -119,54 +119,56 @@ class SkipthoughtModel:
         clipped_grads, _ = tf.clip_by_global_norm(grads, self.grad_clip)
         self.train_op = optimizer.apply_gradients(zip(clipped_grads, tvars), global_step=global_step)
 
-    def _fill_feed_dict_train(self, curr,
-                              prev_input, prev_target,
-                              next_input, next_target):
+    def _fill_feed_dict_train(self, enc_inp,
+                              prev_inp, prev_targ,
+                              next_inp, next_targ):
         """Fills feed dictionary.
 
         Args:
-            curr (data_utils.Batch):
-            prev_input (data_reader.Batch):
-            prev_target (data_reader.Batch):
-            next_input (data_reader.Batch):
-            next_target (data_reader.Batch):
+            enc_inp (data_utils.Batch): Encoder input batch.
+            prev_inp (data_reader.Batch): Prev decoder input batch.
+            prev_targ (data_reader.Batch): Prev decoder target batch.
+            next_inp (data_reader.Batch): Next decoder input batch.
+            next_targ (data_reader.Batch): Next decoder target batch.
         Returns:
             feed_dict (dict): Feed dictionary.
         """
-        assert prev_input.shape == prev_target.shape == next_input.shape == next_target.shape
-        assert prev_input.shape[1] == self.max_length_decoder
+        assert prev_inp.shape == prev_targ.shape == next_inp.shape == next_targ.shape
+        assert prev_inp.shape[1] == self.max_length_decoder
         max_len = self.max_length_decoder
 
-        feed_dict = {self.encoder_input: curr.data, self.encoder_seq_len: curr.seq_lengths}
-        feed_dict.update({self.prev_decoder_input[i]: prev_input.data[:, i] for i in range(max_len)})
-        feed_dict.update({self.prev_decoder_target[i]: prev_target.data[:, i] for i in range(max_len)})
-        feed_dict.update({self.prev_decoder_weights[i]: prev_target.weights[:, i] for i in range(max_len)})
+        feed_dict = {self.encoder_input: enc_inp.data, self.encoder_seq_len: enc_inp.seq_lengths}
+        feed_dict.update({self.prev_decoder_input[i]: prev_inp.data[:, i] for i in range(max_len)})
+        feed_dict.update({self.prev_decoder_target[i]: prev_targ.data[:, i] for i in range(max_len)})
+        feed_dict.update({self.prev_decoder_weights[i]: prev_targ.weights[:, i] for i in range(max_len)})
 
-        feed_dict.update({self.next_decoder_input[i]: next_input.data[:, i] for i in range(max_len)})
-        feed_dict.update({self.next_decoder_target[i]: next_target.data[:, i] for i in range(max_len)})
-        feed_dict.update({self.next_decoder_weights[i]: next_target.weights[:, i] for i in range(max_len)})
+        feed_dict.update({self.next_decoder_input[i]: next_inp.data[:, i] for i in range(max_len)})
+        feed_dict.update({self.next_decoder_target[i]: next_targ.data[:, i] for i in range(max_len)})
+        feed_dict.update({self.next_decoder_weights[i]: next_targ.weights[:, i] for i in range(max_len)})
         return feed_dict
 
-    def _fill_feed_dict_predict(self, curr, eos_token):
+    def _fill_feed_dict_predict(self, curr):
         feed_dict = {self.encoder_input: curr.data, self.encoder_seq_len: curr.seq_lengths,
-                     self.prev_decoder_input[0]: np.array([eos_token]),
-                     self.next_decoder_input[0]: np.array([eos_token])}
+                     self.prev_decoder_input[0]: np.array([curr.go_value]),
+                     self.next_decoder_input[0]: np.array([curr.go_value])}
         return feed_dict
 
-    def train_step(self, curr, prev, next):
-        """Returns train_op, loss and feed_dict for performing sess.run(..) on them.
+    def train_step(self, enc_inp, prev_inp, prev_targ, next_inp, next_targ):
+        """Returns train_op, loss and feed_dict for performing sess.run(...) on them.
 
         Args:
-            curr (data_utils.Batch): Encoder input with a shape [batch_size, batch_length].
+            enc_inp (data_utils.Batch): Encoder input with a shape [batch_size, batch_length].
                 Batch length can vary from batch to batch.
-            prev (data_reader.Batch): Prev decoder input with a shape [batch_size, self.max_decoder_length]
-            next (data_reader.Batch): Next decoder input with a shape [batch_size, self.max_decoder_length]
+            prev_inp (data_reader.Batch): Prev decoder input with a shape [batch_size, self.max_decoder_length]
+            prev_targ (data_reader.Batch): Prev decoder target with a shape [batch_size, self.max_decoder_length]
+            next_inp (data_reader.Batch): Next decoder input with a shape [batch_size, self.max_decoder_length]
+            next_targ (data_reader.Batch): Next decoder target with a shape [batch_size, self.max_decoder_length]
         Returns:
             (self.train_op, self.loss, feed_dict)
         """
-        feed_dict = self._fill_feed_dict_train(curr, prev, next)
+        feed_dict = self._fill_feed_dict_train(enc_inp, prev_inp, prev_targ, next_inp, next_targ)
         return self.train_op, self.loss, feed_dict
 
-    def predict(self, curr, eos_token):
-        feed_dict = self._fill_feed_dict_predict(curr, eos_token)
+    def predict(self, curr):
+        feed_dict = self._fill_feed_dict_predict(curr)
         return self.prev_decoder_predict, self.next_decoder_predict, feed_dict

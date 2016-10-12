@@ -1,10 +1,12 @@
 import logging
+import numpy as np
+
 from collections import defaultdict
 from skipthought import utils
 
 
 class Batch:
-    def __init__(self, data, pad_value):
+    def __init__(self, data, pad_value, go_value, eos_value):
         """Class which creates batch from data and could be passed into
         SkipthoughtModel._fill_feed_dict_* methods.
 
@@ -14,13 +16,17 @@ class Batch:
 
         Args:
             data (np.array): Encoded and padded batch.
-            pad_value (int): Padding value.
+            pad_value (int): <pad> token index.
+            go_value (int): <go> token index.
+            eos_value (int): <eos> token index.
         """
         self.data = data
         self.pad_value = pad_value
+        self.go_value = go_value
+        self.eos_value = eos_value
 
-        self._weights = utils.get_weights_for_sequence_loss(self.data, self.pad_value)
-        self._seq_lengths = utils.padded_sequence_lengths(self.data, self.pad_value)
+        self._weights = utils.seq_loss_weights(self.data, self.pad_value)
+        self._seq_lengths = utils.sequence_lengths(self.data, self.pad_value)
 
     def __getitem__(self, item):
         return self.data[item]
@@ -55,15 +61,19 @@ class Vocab:
         self.add_words(Vocab.START_VOCAB)
 
     @property
-    def eos_token(self):
+    def eos_value(self):
         return self.encode_word(Vocab.EOS_TOKEN)
 
     @property
-    def pad_token(self):
+    def go_value(self):
+        return self.eos_value
+
+    @property
+    def pad_value(self):
         return self.encode_word(Vocab.PAD_TOKEN)
 
     @property
-    def unk_token(self):
+    def unk_value(self):
         return self.encode_word(Vocab.UNK_TOKEN)
 
     def cut_by_freq(self, max_vocab_size):
@@ -101,10 +111,10 @@ class Vocab:
     def encode_words(self, words, with_eos=False, with_go=False):
         encoded = []
         if with_go:
-            encoded.append(self.eos_token)
+            encoded.append(self.eos_value)
         encoded.extend([self.encode_word(w) for w in words])
         if with_eos:
-            encoded.append(self.eos_token)
+            encoded.append(self.eos_value)
         return encoded
 
     def decode_idx(self, index):
@@ -128,7 +138,7 @@ class Vocab:
 class TextData:
     def __init__(self, fname, line_process_fn=lambda x: x.strip(),
                  max_vocab_size=100000, verbose=10000):
-        """Class for reading text data and generating batches.
+        """Class for reading text data and making batches.
 
         Args:
             fname (str): File with data.
@@ -193,7 +203,7 @@ class TextData:
 
         Args:
             line (str): Raw lines.
-            with_eos (bool): Whether to append eos_token at the end or not.
+            with_eos (bool): Whether to append eos_value at the end or not.
             with_go (bool): Whether to append go_token in the beginning of line or not.
         Returns:
              encoded (list of ints): Encoded line.
@@ -207,7 +217,7 @@ class TextData:
 
         Args:
             lines (list of str): List of raw lines.
-            with_eos (bool): Whether to append eos_token at the end of each line or not.
+            with_eos (bool): Whether to append eos_value at the end of each line or not.
             with_go (bool): Whether to append go_token in the beginning of each line or not.
         Returns:
              encoded (list of list of ints): List of encoded lines.
@@ -224,13 +234,86 @@ class TextData:
         Args:
             encoded_lines (list of list of int): List of encoded lines. Encoded lines
             can be obtained via ``encode_lines`` or ``encode_line`` methods.
-            max_len (int): If not None, lines will be padded up to max_len with vocab.pad_token.
+            max_len (int): If not None, lines will be padded up to max_len with vocab.pad_value.
                 Otherwise, lines will be padded using maximum length of line in ``encoded_lines``.
         Returns:
             batch (Batch): Batch instance.
         """
         if not max_len:
             max_len = max(map(len, encoded_lines))
-        padded_lines = utils.pad_sequences(encoded_lines, max_len, self.vocab.pad_token)
-        batch = Batch(padded_lines, self.vocab.pad_token)
+        padded_lines = utils.pad_sequences(encoded_lines, max_len, self.vocab.pad_value)
+        batch = Batch(padded_lines, self.vocab.pad_value, self.vocab.go_value, self.vocab.eos_value)
         return batch
+
+    def make_triples(self, lines):
+        """Returns prev, curr, next lists based on lines.
+
+        There will be asymmetric context for first and last lines.
+
+        Args:
+            lines (list of str): List of lines.
+        Returns:
+            prev, curr, next (tuple of list of str):
+        """
+        if len(lines) < 3:
+            return [], [], []
+        prev = lines[:-2]
+        curr = lines[1:-1]
+        next = lines[2:]
+        return prev, curr, next
+
+    def triples_data_iterator(self, prev_data, curr_data, next_data, max_len,
+                              batch_size=64, shuffle=False):
+        """Creates iterator for (current sentence, prev sentence, next sentence)
+        data. Is is useful for training skip-thought vectors.
+
+        Args:
+            curr_data (list of lists of ints): List with raw lines which corresponds to current sentences.
+                Lines can be with different lengths. They will be encoder inputs.
+            prev_data (list of lists of ints): List with raw previous
+                lines. Lines can be with different lengths.
+            next_data (list of lists of ints): List with raw next lines.
+                Lines can be with different lengths.
+            max_len (int): Maximum length for padding previous and next sentences.
+            batch_size (int): Size of batch.
+            shuffle (bool): Whether to shuffle data or not.
+
+        Yields:
+            enc_inp, prev_inp, prev_targ, next_inp, next_targ (Batch)
+
+        """
+        if shuffle:
+            indices = np.random.permutation(len(curr_data))
+            curr_data = [curr_data[i] for i in indices]
+            prev_data = [prev_data[i] for i in indices]
+            next_data = [next_data[i] for i in indices]
+
+        total_processed_examples = 0
+        total_steps = int(np.ceil(len(curr_data)) / float(batch_size))
+        for step in range(total_steps+1):
+            batch_start = step * batch_size
+
+            curr = curr_data[batch_start:batch_start + batch_size]
+            prev = prev_data[batch_start:batch_start + batch_size]
+            next = next_data[batch_start:batch_start + batch_size]
+
+            enc_inp = self.make_batch(self.encode_lines(curr))
+
+            prev_inp = self.make_batch(self.encode_lines(prev, with_go=True), max_len)
+            prev_targ = self.make_batch(self.encode_lines(prev, with_eos=True), max_len)
+
+            next_inp = self.make_batch(self.encode_lines(next, with_go=True), max_len)
+            next_targ = self.make_batch(self.encode_lines(next, with_eos=True), max_len)
+
+            assert prev_inp.shape == prev_targ.shape == next_inp.shape == next_targ.shape
+
+            yield enc_inp, prev_inp, prev_targ, next_inp, next_targ
+
+            total_processed_examples += len(curr)
+
+            if total_processed_examples == len(curr_data):
+                break
+        # Sanity check to make sure we iterated over all the dataset as intended
+        assert total_processed_examples == len(curr_data), \
+            'Expected {} and processed {}'.format(len(curr_data),
+                                                  total_processed_examples)
