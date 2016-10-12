@@ -43,7 +43,7 @@ def padded_sequence_lengths(data, pad_value):
 
     Args:
         data (numpy.array): Array with sequence word indices aligned with pad_value.
-        pad_value (float): Value used for padding sequences.
+        pad_value (int): Value used for padding sequences.
 
     Returns:
         res (numpy.array): 1D array with sequence lengths.
@@ -59,7 +59,7 @@ def pad_sequences(data, max_length, pad_value):
     Args:
         data (lists of lists of int): List of encoded lines.
         max_length (int): Padded sequence length.
-        pad_value (float): Padding value.
+        pad_value (int): Padding value.
 
     Returns:
         object (numpy.array): Padded array of indices.
@@ -75,7 +75,7 @@ def get_weights_for_sequence_loss(data, pad_value, dtype=np.float32):
 
     Args:
         data (numpy.array): Array with padded sentences.
-        pad_value (float): Padding value.
+        pad_value (int): Padding value.
         dtype (numpy.dtype): Weights type.
 
     Returns:
