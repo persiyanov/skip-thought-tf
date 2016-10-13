@@ -36,8 +36,8 @@ class SkipthoughtModel:
     def _check_args(self):
         if self.cell_type not in self.SUPPORTED_CELLTYPES:
             raise ValueError("This cell type is not supported.")
-        if self.num_samples <= 0:
-            raise ValueError("num_samples must be greater than zero.")
+        if self.num_samples <= 0 or self.num_samples > self.max_vocab_size:
+            raise ValueError("num_samples must be greater than zero and leq than max_vocab_size")
 
     def _create_placeholders(self):
         with tf.variable_scope('placeholders'):
@@ -114,7 +114,9 @@ class SkipthoughtModel:
         self.next_decoder_predict_logits = next_decoder_predict_logits
         self.next_decoder_predict = [tf.argmax(logit, 1) for logit in self.next_decoder_predict_logits]
 
-        def get_sampled_loss(w_t, b):
+        def get_sampled_loss(w, b):
+            w_t = tf.transpose(w)
+
             def sampled_loss(inputs, labels):
                 labels = tf.reshape(labels, [-1, 1])
                 # We need to compute the sampled_softmax_loss using 32bit floats to
@@ -123,7 +125,7 @@ class SkipthoughtModel:
                 local_b = tf.cast(b, tf.float32)
                 local_inputs = tf.cast(inputs, tf.float32)
                 return tf.nn.sampled_softmax_loss(local_w_t, local_b, local_inputs, labels,
-                                               self.num_samples, self.max_vocab_size)
+                                                  self.num_samples, self.max_vocab_size)
             return sampled_loss
 
         prev_sampled_loss = get_sampled_loss(*prev_decoder_output_proj)
