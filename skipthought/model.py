@@ -9,8 +9,8 @@ class SkipthoughtModel:
 
     SUPPORTED_CELLTYPES = ['lstm', 'gru']
 
-    def __init__(self, cell_type, num_hidden, embedding_size, max_vocab_size,
-                 learning_rate, decay_rate, decay_steps, grad_clip, max_length_decoder):
+    def __init__(self, cell_type, num_hidden, num_layers, embedding_size, max_vocab_size,
+                 learning_rate, decay_rate, decay_steps, grad_clip, num_samples, max_length_decoder):
         self.cell_type = cell_type
         self.max_length_decoder = max_length_decoder
         self.grad_clip = grad_clip
@@ -20,8 +20,15 @@ class SkipthoughtModel:
         self.max_vocab_size = max_vocab_size
         self.embedding_size = embedding_size
         self.num_hidden = num_hidden
+        self.num_layers = num_layers
+        self.num_samples = num_samples
 
         self._check_args()
+
+        if self.cell_type == 'lstm':
+            self.cell_fn = lambda x: tf.nn.rnn_cell.BasicLSTMCell(x, state_is_tuple=True)
+        elif self.cell_type == 'gru':
+            self.cell_fn = tf.nn.rnn_cell.GRUCell
 
         self._create_placeholders()
         self._create_network()
@@ -29,6 +36,8 @@ class SkipthoughtModel:
     def _check_args(self):
         if self.cell_type not in self.SUPPORTED_CELLTYPES:
             raise ValueError("This cell type is not supported.")
+        if self.num_samples <= 0:
+            raise ValueError("num_samples must be greater than zero.")
 
     def _create_placeholders(self):
         with tf.variable_scope('placeholders'):
@@ -49,6 +58,30 @@ class SkipthoughtModel:
             self.next_decoder_weights = [tf.placeholder(tf.float32, shape=[None,], name="next__decoder_weight{0}".format(i))
                                          for i in range(self.max_length_decoder)]
 
+    def _create_decoder(self, scope_name, encoder_state, decoder_input):
+        loop_function_predict = tf.nn.seq2seq._extract_argmax_and_embed(self.embedding_matrix, update_embedding=False)
+        with tf.variable_scope(scope_name):
+            embedded_prev = [tf.nn.embedding_lookup(self.embedding_matrix, inp) for inp in decoder_input]
+
+            cell = self.cell_fn(self.num_hidden)
+
+            # cell = tf.nn.rnn_cell.OutputProjectionWrapper(cell, self.max_vocab_size)
+
+            w_t = tf.get_variable("proj_w", [self.max_vocab_size, self.num_hidden])
+            w = tf.transpose(w_t)
+            b = tf.get_variable("proj_b", [self.max_vocab_size])
+            output_projection = (w, b)
+
+            decoder_outputs, _ = tf.nn.seq2seq.rnn_decoder(embedded_prev, initial_state=encoder_state,
+                                                           cell=cell)
+
+        with tf.variable_scope(scope_name, reuse=True):
+            decoder_predict_hiddens, _ = tf.nn.seq2seq.rnn_decoder(embedded_prev, initial_state=encoder_state,
+                                                                       cell=cell, loop_function=loop_function_predict)
+
+            decoder_predict_logits = [tf.nn.xw_plus_b(x, w, b) for x in decoder_predict_hiddens]
+        return decoder_outputs, decoder_predict_logits, output_projection
+
     def _create_network(self):
         with tf.variable_scope('embeddings'):
             # Default initializer for embeddings should have variance=1.
@@ -59,43 +92,19 @@ class SkipthoughtModel:
                                                     initializer=initializer)
             embedded = tf.nn.embedding_lookup(self.embedding_matrix, self.encoder_input)
 
-        if self.cell_type == 'lstm':
-            cell_fn = lambda x: tf.nn.rnn_cell.BasicLSTMCell(x, state_is_tuple=True)
-        elif self.cell_type == 'gru':
-            cell_fn = lambda x: tf.nn.rnn_cell.GRUCell
-
         with tf.variable_scope('encoder'):
-            cell = cell_fn(self.num_hidden)
+            cell = self.cell_fn(self.num_hidden)
+            if self.num_layers > 1:
+                cell = tf.nn.rnn_cell.MultiRNNCell([cell] * self.num_layers)
             encoder_output, encoder_state = tf.nn.dynamic_rnn(cell, dtype=tf.float32,
                                                               inputs=embedded,
                                                               sequence_length=self.encoder_seq_len)
 
-        loop_function_predict = tf.nn.seq2seq._extract_argmax_and_embed(self.embedding_matrix, update_embedding=False)
-        with tf.variable_scope('prev_decoder'):
-            embedded_prev = [tf.nn.embedding_lookup(self.embedding_matrix, inp) for inp in self.prev_decoder_input]
+        prev_decoder_outputs, prev_decoder_predict_logits, prev_decoder_output_proj = \
+            self._create_decoder("prev_decoder", encoder_state, self.prev_decoder_input)
 
-            cell = cell_fn(self.num_hidden)
-            cell = tf.nn.rnn_cell.OutputProjectionWrapper(cell, self.max_vocab_size)
-
-            prev_decoder_outputs, _ = tf.nn.seq2seq.rnn_decoder(embedded_prev, initial_state=encoder_state,
-                                                                cell=cell)
-
-        with tf.variable_scope("prev_decoder", reuse=True):
-            prev_decoder_predict_logits, _ = tf.nn.seq2seq.rnn_decoder(embedded_prev, initial_state=encoder_state,
-                                                                       cell=cell, loop_function=loop_function_predict)
-
-        with tf.variable_scope("next_decoder"):
-            embedded_next = [tf.nn.embedding_lookup(self.embedding_matrix, inp) for inp in self.next_decoder_input]
-
-            cell = cell_fn(self.num_hidden)
-            cell = tf.nn.rnn_cell.OutputProjectionWrapper(cell, self.max_vocab_size)
-
-            next_decoder_outputs, _ = tf.nn.seq2seq.rnn_decoder(embedded_next, initial_state=encoder_state,
-                                                                cell=cell)
-
-        with tf.variable_scope("next_decoder", reuse=True):
-            next_decoder_predict_logits, _ = tf.nn.seq2seq.rnn_decoder(embedded_next, initial_state=encoder_state,
-                                                                       cell=cell, loop_function=loop_function_predict)
+        next_decoder_outputs, next_decoder_predict_logits, next_decoder_output_proj = \
+            self._create_decoder("next_decoder", encoder_state, self.next_decoder_input)
 
         self.prev_decoder_outputs = prev_decoder_outputs
         self.prev_decoder_predict_logits = prev_decoder_predict_logits
@@ -105,8 +114,28 @@ class SkipthoughtModel:
         self.next_decoder_predict_logits = next_decoder_predict_logits
         self.next_decoder_predict = [tf.argmax(logit, 1) for logit in self.next_decoder_predict_logits]
 
-        loss_prev = tf.nn.seq2seq.sequence_loss(prev_decoder_outputs, self.prev_decoder_target, self.prev_decoder_weights)
-        loss_next = tf.nn.seq2seq.sequence_loss(next_decoder_outputs, self.next_decoder_target, self.next_decoder_weights)
+        def get_sampled_loss(w_t, b):
+            def sampled_loss(inputs, labels):
+                labels = tf.reshape(labels, [-1, 1])
+                # We need to compute the sampled_softmax_loss using 32bit floats to
+                # avoid numerical instabilities.
+                local_w_t = tf.cast(w_t, tf.float32)
+                local_b = tf.cast(b, tf.float32)
+                local_inputs = tf.cast(inputs, tf.float32)
+                return tf.nn.sampled_softmax_loss(local_w_t, local_b, local_inputs, labels,
+                                               self.num_samples, self.max_vocab_size)
+            return sampled_loss
+
+        prev_sampled_loss = get_sampled_loss(*prev_decoder_output_proj)
+        next_sampled_loss = get_sampled_loss(*next_decoder_output_proj)
+        loss_prev = tf.nn.seq2seq.sequence_loss(prev_decoder_outputs,
+                                                self.prev_decoder_target,
+                                                self.prev_decoder_weights,
+                                                softmax_loss_function=prev_sampled_loss)
+        loss_next = tf.nn.seq2seq.sequence_loss(next_decoder_outputs,
+                                                self.next_decoder_target,
+                                                self.next_decoder_weights,
+                                                softmax_loss_function=next_sampled_loss)
         self.loss = loss_prev + loss_next
 
         global_step = tf.Variable(0, trainable=False)
