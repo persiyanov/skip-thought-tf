@@ -51,7 +51,7 @@ def main(**kwargs):
         # check if all necessary files exist
         assert os.path.isdir(kwargs['init_from']), "%s must be a a path" % kwargs['init_from']
         assert os.path.isfile(os.path.join(kwargs['init_from'], "config.pkl")), "config.pkl file does not exist in path %s" % kwargs['init_from']
-        assert os.path.isfile(os.path.join(kwargs['init_from'], "chars_vocab.pkl")), "chars_vocab.pkl.pkl file does not exist in path %s" % kwargs['init_from']
+        assert os.path.isfile(os.path.join(kwargs['init_from'], "textdata.pkl")), "textdata.pkl file does not exist in path %s" % kwargs['init_from']
         ckpt = tf.train.get_checkpoint_state(kwargs['init_from'])
         assert ckpt, "No checkpoint found"
         assert ckpt.model_checkpoint_path, "No model path found in checkpoint"
