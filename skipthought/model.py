@@ -108,15 +108,19 @@ class SkipthoughtModel:
                                                               inputs=embedded,
                                                               sequence_length=self.encoder_seq_len,
                                                               swap_memory=True)
-            self.encoder_state = encoder_state
+            if self.num_layers == 1:
+                self.encoder_state = encoder_state
+            else:
+                assert isinstance(encoder_state, tuple)
+                self.encoder_state = encoder_state[-1]
         self._logger.info("Encoder done")
 
         prev_decoder_outputs, prev_decoder_predict_logits, prev_decoder_output_proj = \
-            self._create_decoder("prev_decoder", encoder_state, self.prev_decoder_input)
+            self._create_decoder("prev_decoder", self.encoder_state, self.prev_decoder_input)
         self._logger.info("Prev decoder done")
 
         next_decoder_outputs, next_decoder_predict_logits, next_decoder_output_proj = \
-            self._create_decoder("next_decoder", encoder_state, self.next_decoder_input)
+            self._create_decoder("next_decoder", self.encoder_state, self.next_decoder_input)
         self._logger.info("Next decoder done")
 
         self.prev_decoder_outputs = prev_decoder_outputs

@@ -13,6 +13,7 @@ def sequence_lengths(data, pad_value):
     Returns:
         res (numpy.array): 1D array with sequence lengths.
     """
+    assert data.ndim == 2, data
     res = np.sum((data != pad_value).astype(np.int32), axis=1)
     return res
 

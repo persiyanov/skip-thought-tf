@@ -138,7 +138,7 @@ class Vocab:
 
 class TextData:
     def __init__(self, fname, line_process_fn=lambda x: x.strip(),
-                 max_vocab_size=100000, verbose=10000):
+                 max_vocab_size=100000, max_len=100, verbose=10000):
         """Class for reading text data and making batches.
 
         Args:
@@ -151,6 +151,7 @@ class TextData:
         self.verbose = verbose
         self._logger = logging.getLogger(__name__)
         self.fname = fname
+        self.max_len = max_len
         self.max_vocab_size = max_vocab_size
         self.line_process_fn = line_process_fn
 
@@ -158,7 +159,6 @@ class TextData:
 
         self.vocab = None
         self.dataset = None
-        self.max_len = None
         self.total_lines = None
 
         self._build_vocabulary_and_stats()
@@ -176,13 +176,12 @@ class TextData:
         with open(self.fname) as f:
             self.vocab = Vocab()
             self.total_lines = 0
-            self.max_len = 0
             for line in f:
                 tokens = self._tok_line(line)
+                tokens = tokens[:self.max_len-1] # cutting at maxlen (-1 because of pad token)
                 self.vocab.add_words(tokens)
 
                 self.total_lines += 1
-                self.max_len = max(self.max_len, len(tokens))
                 if self.total_lines % self.verbose == 0:
                     self._logger.info("Read\t{0} lines.".format(
                         self.total_lines))
@@ -250,7 +249,8 @@ class TextData:
             batch (Batch): Batch instance.
         """
         if not max_len:
-            max_len = max(map(len, encoded_lines))
+            max_len = min(max(map(len, encoded_lines)), self.max_len)
+        encoded_lines = [line[:max_len-1] for line in encoded_lines]
         padded_lines = utils.pad_sequences(encoded_lines, max_len, self.vocab.pad_value)
         batch = Batch(padded_lines, self.vocab.pad_value, self.vocab.go_value, self.vocab.eos_value)
         return batch
@@ -281,6 +281,8 @@ class TextData:
         all_prev, all_curr, all_next = [], [], []
         for start, end in zip(idxs[:-1], idxs[1:]):
             tmp_prev, tmp_curr, tmp_next = self._make_triples_for_paragraph(lines[start+1:end])
+            if tmp_prev == [] or tmp_curr == [] or tmp_next == []:
+                continue
             all_prev.extend(tmp_prev)
             all_curr.extend(tmp_curr)
             all_next.extend(tmp_next)
@@ -328,8 +330,7 @@ class TextData:
 
             next_inp = self.make_batch(self.encode_lines(next, with_go=True), max_len)
             next_targ = self.make_batch(self.encode_lines(next, with_eos=True), max_len)
-
-            assert prev_inp.shape == prev_targ.shape == next_inp.shape == next_targ.shape
+            assert prev_inp.shape == prev_targ.shape == next_inp.shape == next_targ.shape, (prev, curr, next)
 
             yield enc_inp, prev_inp, prev_targ, next_inp, next_targ
 

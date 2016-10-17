@@ -20,9 +20,11 @@ logger = logging.getLogger(__name__)
 @click.option('--num_epochs', default=10, type=int, help="Number of epochs.")
 @click.option('--num_layers', default=1, type=int, help="Number of layers in encoder.")
 @click.option('--batch_size', default=128, type=int, help="The size of batch.")
+@click.option('--max_len', default=100, type=int, help='Maximum sequence length in encoder and decoder.'
+                                                       'Lines with higher length will be cutted.')
 @click.option('--num_hidden', default=512, type=int, help="Hidden size of the cell.")
 @click.option('--cell_type', default='gru',
-            type=click.Choice(SkipthoughtModel.SUPPORTED_CELLTYPES),
+              type=click.Choice(SkipthoughtModel.SUPPORTED_CELLTYPES),
               help='Type of the RNN cell.')
 @click.option('--embedding_size', default=1024, type=int, help="The size of word embeddings.")
 @click.option('--max_vocab_size', default=100000, type=int, help="Size of vocabulary. Most frequent words are used.")
@@ -42,8 +44,7 @@ logger = logging.getLogger(__name__)
 def main(**kwargs):
     logger.info("Your params:")
     logger.info(kwargs)
-    textdata = TextData(kwargs['data_path'], max_vocab_size=kwargs['max_vocab_size'])
-    max_length_decoder = textdata.max_len
+    textdata = TextData(kwargs['data_path'], max_len=kwargs['max_len'], max_vocab_size=kwargs['max_vocab_size'])
 
     # check compatibility if training is continued from previously saved model
     if kwargs['init_from'] is not None:
@@ -81,9 +82,9 @@ def main(**kwargs):
     model = SkipthoughtModel(kwargs['cell_type'], kwargs['num_hidden'], kwargs['num_layers'],
                              kwargs['embedding_size'], kwargs['max_vocab_size'], kwargs['learning_rate'],
                              kwargs['decay_rate'], decay_steps, kwargs['grad_clip'],
-                             kwargs['num_samples'], max_length_decoder)
+                             kwargs['num_samples'], kwargs['max_len'])
 
-    with tf.Session(config=tf.ConfigProto(log_device_placement=True)) as sess:
+    with tf.Session() as sess:
         init = tf.initialize_all_variables()
         sess.run(init)
         saver = tf.train.Saver(tf.all_variables(), max_to_keep=20)
