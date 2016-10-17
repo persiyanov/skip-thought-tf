@@ -62,7 +62,7 @@ def main(**kwargs):
             need_be_same = ["cell_type", "num_hidden", "num_layers", "grad_clip", "num_samples",
                             "max_vocab_size"]
             for checkme in need_be_same:
-                assert vars(saved_model_args)[checkme] == vars(kwargs)[checkme], "Command line argument and saved model disagree on '%s' " % checkme
+                assert saved_model_args[checkme] == kwargs[checkme], "Command line argument and saved model disagree on '%s' " % checkme
         logger.info("Args checker. Load TextData")
         # open saved TextData
         textdata = TextData.load(os.path.join(kwargs['init_from'], 'textdata.pkl'))
