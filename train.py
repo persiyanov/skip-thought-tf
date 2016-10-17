@@ -83,10 +83,10 @@ def main(**kwargs):
                              kwargs['decay_rate'], decay_steps, kwargs['grad_clip'],
                              kwargs['num_samples'], max_length_decoder)
 
-    with tf.Session() as sess:
+    with tf.Session(config=tf.ConfigProto(log_device_placement=True)) as sess:
         init = tf.initialize_all_variables()
         sess.run(init)
-        saver = tf.train.Saver(tf.all_variables(), max_to_keep=200)
+        saver = tf.train.Saver(tf.all_variables(), max_to_keep=20)
 
         if kwargs['init_from'] is not None:
             saver.restore(sess, ckpt.model_checkpoint_path)

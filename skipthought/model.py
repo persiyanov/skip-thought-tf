@@ -106,7 +106,8 @@ class SkipthoughtModel:
                 cell = tf.nn.rnn_cell.MultiRNNCell([cell] * self.num_layers)
             encoder_output, encoder_state = tf.nn.dynamic_rnn(cell, dtype=tf.float32,
                                                               inputs=embedded,
-                                                              sequence_length=self.encoder_seq_len)
+                                                              sequence_length=self.encoder_seq_len,
+                                                              swap_memory=True)
             self.encoder_state = encoder_state
         self._logger.info("Encoder done")
 
