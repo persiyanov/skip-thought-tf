@@ -90,6 +90,7 @@ def main(**kwargs):
 
         if kwargs['init_from'] is not None:
             saver.restore(sess, ckpt.model_checkpoint_path)
+            print("Restored from {0}".format(ckpt.model_checkpoint_path))
 
         num_batches = len(triples[0])//kwargs['batch_size']
         loss_history = []
