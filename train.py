@@ -57,7 +57,7 @@ def main(**kwargs):
         assert ckpt.model_checkpoint_path, "No model path found in checkpoint"
 
         # open old config and check if models are compatible
-        with open(os.path.join(kwargs['init_from'], 'config.pkl')) as f:
+        with open(os.path.join(kwargs['init_from'], 'config.pkl'), 'rb') as f:
             saved_model_args = dill.load(f)
             need_be_same = ["cell_type", "num_hidden", "num_layers", "grad_clip", "num_samples",
                             "max_vocab_size"]
