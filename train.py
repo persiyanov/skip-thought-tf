@@ -76,7 +76,7 @@ def main(**kwargs):
     logger.info("Making triples")
     triples = textdata.make_triples(textdata.dataset)
     logger.info("Number of triples: {0}".format(len(triples[0])))
-    decay_steps = len(triples)
+    decay_steps = len(triples[0])
 
     model = SkipthoughtModel(kwargs['cell_type'], kwargs['num_hidden'], kwargs['num_layers'],
                              kwargs['embedding_size'], kwargs['max_vocab_size'], kwargs['learning_rate'],
@@ -91,7 +91,7 @@ def main(**kwargs):
         if kwargs['init_from'] is not None:
             saver.restore(sess, ckpt.model_checkpoint_path)
 
-        num_batches = len(triples)//kwargs['batch_size']
+        num_batches = len(triples[0])//kwargs['batch_size']
         loss_history = []
         for e in range(kwargs['num_epochs']):
             it = textdata.triples_data_iterator(triples[0], triples[1], triples[2],
