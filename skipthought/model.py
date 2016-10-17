@@ -99,6 +99,7 @@ class SkipthoughtModel:
             encoder_output, encoder_state = tf.nn.dynamic_rnn(cell, dtype=tf.float32,
                                                               inputs=embedded,
                                                               sequence_length=self.encoder_seq_len)
+            self.encoder_state = encoder_state
 
         prev_decoder_outputs, prev_decoder_predict_logits, prev_decoder_output_proj = \
             self._create_decoder("prev_decoder", encoder_state, self.prev_decoder_input)
@@ -199,6 +200,10 @@ class SkipthoughtModel:
         """
         feed_dict = self._fill_feed_dict_train(enc_inp, prev_inp, prev_targ, next_inp, next_targ)
         return self.train_op, self.loss, feed_dict
+
+    def encode(self, curr):
+        feed_dict = self._fill_feed_dict_predict(curr)
+        return self.encoder_state, feed_dict
 
     def predict(self, curr):
         feed_dict = self._fill_feed_dict_predict(curr)

@@ -1,5 +1,6 @@
 import logging
 import numpy as np
+import dill
 
 from collections import defaultdict
 from skipthought import utils
@@ -153,12 +154,20 @@ class TextData:
         self.max_vocab_size = max_vocab_size
         self.line_process_fn = line_process_fn
 
+        self._check_args()
+
         self.vocab = None
         self.dataset = None
         self.max_len = None
         self.total_lines = None
+
         self._build_vocabulary_and_stats()
         self._build_dataset()
+
+    def _check_args(self):
+        import os
+        assert self.max_vocab_size > 0
+        assert os.path.isfile(self.fname)
 
     def _build_vocabulary_and_stats(self):
         """Builds vocabulary, calculates maximum length and total number of
@@ -245,8 +254,20 @@ class TextData:
         batch = Batch(padded_lines, self.vocab.pad_value, self.vocab.go_value, self.vocab.eos_value)
         return batch
 
+    def _make_triples_for_paragraph(self, paragraph):
+        if len(paragraph) < 3:
+            return [], [], []
+        prev = paragraph[:-2]
+        curr = paragraph[1:-1]
+        next = paragraph[2:]
+        return prev, curr, next
+
     def make_triples(self, lines):
         """Returns prev, curr, next lists based on lines.
+
+        Context is not shared between different paragraphs in text. So, last line in one paragraph
+        will not be in context with first line in the next paragraph.
+        Paragraphs must be separated by '\n\n'
 
         There will be asymmetric context for first and last lines.
 
@@ -255,12 +276,14 @@ class TextData:
         Returns:
             prev, curr, next (tuple of list of str):
         """
-        if len(lines) < 3:
-            return [], [], []
-        prev = lines[:-2]
-        curr = lines[1:-1]
-        next = lines[2:]
-        return prev, curr, next
+        idxs = [-1]+list(filter(None, [i if len(lines[i]) == 0 else None for i in range(len(lines))]))+[len(lines)]
+        all_prev, all_curr, all_next = [], [], []
+        for start, end in zip(idxs[:-1], idxs[1:]):
+            tmp_prev, tmp_curr, tmp_next = self._make_triples_for_paragraph(lines[start+1:end])
+            all_prev.extend(tmp_prev)
+            all_curr.extend(tmp_curr)
+            all_next.extend(tmp_next)
+        return all_prev, all_curr, all_next
 
     def triples_data_iterator(self, prev_data, curr_data, next_data, max_len,
                               batch_size=64, shuffle=False):
@@ -317,3 +340,13 @@ class TextData:
         assert total_processed_examples == len(curr_data), \
             'Expected {} and processed {}'.format(len(curr_data),
                                                   total_processed_examples)
+
+    @staticmethod
+    def save(textdata, fname):
+        with open(fname, 'wb') as fout:
+            dill.dump(textdata, fname)
+
+    @staticmethod
+    def load(fname):
+        with open(fname, 'rb') as fin:
+            return dill.load(fin)
