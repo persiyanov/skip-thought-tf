@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 @click.option('--cell_type', default='gru',
               type=click.Choice(SkipthoughtModel.SUPPORTED_CELLTYPES),
               help='Type of the RNN cell.')
-@click.option('--embedding_size', default=1024, type=int, help="The size of word embeddings.")
+@click.option('--embedding_size', default=300, type=int, help="The size of word embeddings.")
 @click.option('--max_vocab_size', default=100000, type=int, help="Size of vocabulary. Most frequent words are used.")
 @click.option('--num_samples', default=512, type=int, help="Number of samples in sampled softmax.")
 @click.option('--learning_rate', default=0.01, type=float, help="Initial learning rate.")
@@ -78,9 +78,10 @@ def main(**kwargs):
     triples = textdata.make_triples(textdata.dataset)
     logger.info("Number of triples: {0}".format(len(triples[0])))
     decay_steps = len(triples[0])
+    vocab_size = len(textdata.vocab)
 
     model = SkipthoughtModel(kwargs['cell_type'], kwargs['num_hidden'], kwargs['num_layers'],
-                             kwargs['embedding_size'], kwargs['max_vocab_size'], kwargs['learning_rate'],
+                             kwargs['embedding_size'], vocab_size, kwargs['learning_rate'],
                              kwargs['decay_rate'], decay_steps, kwargs['grad_clip'],
                              kwargs['num_samples'], kwargs['max_len'])
 
