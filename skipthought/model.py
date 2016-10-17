@@ -1,6 +1,7 @@
 import math
 import tensorflow as tf
 import numpy as np
+import logging
 
 from . import data_utils
 
@@ -22,8 +23,11 @@ class SkipthoughtModel:
         self.num_hidden = num_hidden
         self.num_layers = num_layers
         self.num_samples = num_samples
+        self._logger = logging.getLogger(__name__)
 
+        self._logger.info("Creating SkipthoughModel.")
         self._check_args()
+        self._logger.info("Checked args.")
 
         if self.cell_type == 'lstm':
             self.cell_fn = lambda x: tf.nn.rnn_cell.BasicLSTMCell(x, state_is_tuple=True)
@@ -31,7 +35,9 @@ class SkipthoughtModel:
             self.cell_fn = tf.nn.rnn_cell.GRUCell
 
         self._create_placeholders()
+        self._logger.info("Created placeholders.")
         self._create_network()
+        self._logger.info("Created SkipthoughtModel.")
 
     def _check_args(self):
         if self.cell_type not in self.SUPPORTED_CELLTYPES:
@@ -83,6 +89,7 @@ class SkipthoughtModel:
         return decoder_outputs, decoder_predict_logits, output_projection
 
     def _create_network(self):
+        self._logger.info("Create computational graph")
         with tf.variable_scope('embeddings'):
             # Default initializer for embeddings should have variance=1.
             sqrt3 = math.sqrt(3)  # Uniform(-sqrt(3), sqrt(3)) has variance=1.
@@ -91,6 +98,7 @@ class SkipthoughtModel:
                                                     shape=[self.max_vocab_size, self.embedding_size],
                                                     initializer=initializer)
             embedded = tf.nn.embedding_lookup(self.embedding_matrix, self.encoder_input)
+        self._logger.info("Embeddings done")
 
         with tf.variable_scope('encoder'):
             cell = self.cell_fn(self.num_hidden)
@@ -100,12 +108,15 @@ class SkipthoughtModel:
                                                               inputs=embedded,
                                                               sequence_length=self.encoder_seq_len)
             self.encoder_state = encoder_state
+        self._logger.info("Encoder done")
 
         prev_decoder_outputs, prev_decoder_predict_logits, prev_decoder_output_proj = \
             self._create_decoder("prev_decoder", encoder_state, self.prev_decoder_input)
+        self._logger.info("Prev decoder done")
 
         next_decoder_outputs, next_decoder_predict_logits, next_decoder_output_proj = \
             self._create_decoder("next_decoder", encoder_state, self.next_decoder_input)
+        self._logger.info("Next decoder done")
 
         self.prev_decoder_outputs = prev_decoder_outputs
         self.prev_decoder_predict_logits = prev_decoder_predict_logits
@@ -150,6 +161,7 @@ class SkipthoughtModel:
         grads = tf.gradients(self.loss, tvars)
         clipped_grads, _ = tf.clip_by_global_norm(grads, self.grad_clip)
         self.train_op = optimizer.apply_gradients(zip(clipped_grads, tvars), global_step=global_step)
+        self._logger.info("Loss and optimizer done")
 
     def _fill_feed_dict_train(self, enc_inp,
                               prev_inp, prev_targ,

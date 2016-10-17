@@ -184,9 +184,10 @@ class TextData:
                 self.total_lines += 1
                 self.max_len = max(self.max_len, len(tokens))
                 if self.total_lines % self.verbose == 0:
-                    self._logger.warning("Read\t{0} lines.".format(
+                    self._logger.info("Read\t{0} lines.".format(
                         self.total_lines))
         self.vocab.cut_by_freq(self.max_vocab_size)
+        self._logger.info("Done building vocab and stats.")
 
     def _build_dataset(self):
         """Reads lines from file and encodes words.
@@ -344,7 +345,7 @@ class TextData:
     @staticmethod
     def save(textdata, fname):
         with open(fname, 'wb') as fout:
-            dill.dump(textdata, fname)
+            dill.dump(textdata, fout)
 
     @staticmethod
     def load(fname):
