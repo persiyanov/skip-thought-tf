@@ -79,6 +79,7 @@ def main(**kwargs):
     logger.info("Number of triples: {0}".format(len(triples[0])))
     decay_steps = len(triples[0])
     vocab_size = len(textdata.vocab)
+    logger.info("actual vocab_size={0}".format(vocab_size))
 
     model = SkipthoughtModel(kwargs['cell_type'], kwargs['num_hidden'], kwargs['num_layers'],
                              kwargs['embedding_size'], vocab_size, kwargs['learning_rate'],
@@ -118,7 +119,9 @@ def main(**kwargs):
                         or (e == kwargs['num_epochs']-1 and b == num_batches-1): # save for the last result
                     checkpoint_path = os.path.join(kwargs['save_dir'], 'model.ckpt')
                     saver.save(sess, checkpoint_path, global_step=e * num_batches + b)
-                    print("model saved to {}".format(checkpoint_path))
+                    with open(os.path.join(kwargs['save_dir'], 'loss_history.pkl'), 'wb') as f:
+                        dill.dump(loss_history, f)
+                    print("model & loss_history saved to {}".format(checkpoint_path))
 
 if __name__ == "__main__":
     main()
