@@ -88,6 +88,36 @@ class SkipthoughtModel:
             decoder_predict_logits = [tf.nn.xw_plus_b(x, w, b) for x in decoder_predict_hiddens]
         return decoder_outputs, decoder_predict_logits, output_projection
 
+    def _create_encoder(self, embedded, cudnn=False):
+        with tf.variable_scope('encoder'):
+            if cudnn:
+                if self.cell_type == 'lstm':
+                    pass
+                    # lstm_cell = tf.contrib.cudnn_rnn.CudnnLSTM(self.num_layers, self.num_hidden, self.embedding_size)
+                    # params_size_t = lstm_cell.params_size()
+                    # input_h = tf.Variable(tf.ones([self.num_layers, 64, self.num_hidden]), name='input_h')
+                    # input_c = tf.Variable(tf.ones([self.num_layers, 64, self.num_hidden]), name='input_c')
+                    # params = tf.Variable(tf.ones([params_size_t]), validate_shape=False, name='params_lstm')
+                    # lstm_cell(is_training=True, )
+                else:
+                    pass
+                    # tf.contrib.cudnn_rnn.CudnnGRU(self.num_layers, self.num_hidden, self.embedding_size)
+            else:
+                cell = self.cell_fn(self.num_hidden)
+                if self.num_layers > 1:
+                    cell = tf.nn.rnn_cell.MultiRNNCell([cell] * self.num_layers)
+                encoder_output, encoder_state = tf.nn.dynamic_rnn(cell, dtype=tf.float32,
+                                                                  inputs=embedded,
+                                                                  sequence_length=self.encoder_seq_len,
+                                                                  swap_memory=True)
+                if self.num_layers == 1:
+                    encoder_state = encoder_state
+                else:
+                    assert isinstance(encoder_state, tuple)
+                    encoder_state = encoder_state[-1]
+        self._logger.info("Encoder done")
+        return encoder_state
+
     def _create_network(self):
         self._logger.info("Create computational graph")
         with tf.variable_scope('embeddings'):
@@ -100,20 +130,7 @@ class SkipthoughtModel:
             embedded = tf.nn.embedding_lookup(self.embedding_matrix, self.encoder_input)
         self._logger.info("Embeddings done")
 
-        with tf.variable_scope('encoder'):
-            cell = self.cell_fn(self.num_hidden)
-            if self.num_layers > 1:
-                cell = tf.nn.rnn_cell.MultiRNNCell([cell] * self.num_layers)
-            encoder_output, encoder_state = tf.nn.dynamic_rnn(cell, dtype=tf.float32,
-                                                              inputs=embedded,
-                                                              sequence_length=self.encoder_seq_len,
-                                                              swap_memory=True)
-            if self.num_layers == 1:
-                self.encoder_state = encoder_state
-            else:
-                assert isinstance(encoder_state, tuple)
-                self.encoder_state = encoder_state[-1]
-        self._logger.info("Encoder done")
+        self.encoder_state = self._create_encoder(embedded, cudnn=False)
 
         prev_decoder_outputs, prev_decoder_predict_logits, prev_decoder_output_proj = \
             self._create_decoder("prev_decoder", self.encoder_state, self.prev_decoder_input)
