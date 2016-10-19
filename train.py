@@ -115,7 +115,7 @@ def main(**kwargs):
                                 .format(e * num_batches + b,
                                         kwargs['num_epochs'] * num_batches,
                                         e, batch_loss, batch_perplexity, end_time - start_time))
-                if (e * num_batches + b + 1) % kwargs['save_every'] == 0 \
+                if (e * num_batches + b) % kwargs['save_every'] == 0 \
                         or (e == kwargs['num_epochs']-1 and b == num_batches-1): # save for the last result
                     checkpoint_path = os.path.join(kwargs['save_dir'], 'model.ckpt')
                     saver.save(sess, checkpoint_path, global_step=e * num_batches + b)
