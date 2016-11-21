@@ -65,7 +65,6 @@ class SkipthoughtModel:
                                          for i in range(self.max_length_decoder)]
 
     def _create_decoder(self, scope_name, encoder_state, decoder_input):
-        loop_function_predict = tf.nn.seq2seq._extract_argmax_and_embed(self.embedding_matrix, update_embedding=False)
         with tf.variable_scope(scope_name):
             embedded_prev = [tf.nn.embedding_lookup(self.embedding_matrix, inp) for inp in decoder_input]
 
@@ -81,6 +80,7 @@ class SkipthoughtModel:
             decoder_outputs, _ = tf.nn.seq2seq.rnn_decoder(embedded_prev, initial_state=encoder_state,
                                                            cell=cell)
 
+        loop_function_predict = tf.nn.seq2seq._extract_argmax_and_embed(self.embedding_matrix, output_projection=(w, b), update_embedding=False)
         with tf.variable_scope(scope_name, reuse=True):
             decoder_predict_hiddens, _ = tf.nn.seq2seq.rnn_decoder(embedded_prev, initial_state=encoder_state,
                                                                        cell=cell, loop_function=loop_function_predict)
