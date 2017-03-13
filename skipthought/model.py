@@ -30,9 +30,11 @@ class SkipthoughtModel:
         self._logger.info("Checked args.")
 
         if self.cell_type == 'lstm':
-            self.cell_fn = lambda x: tf.nn.rnn_cell.BasicLSTMCell(x, state_is_tuple=True)
+            # self.cell_fn = lambda x: tf.nn.rnn_cell.BasicLSTMCell(x, state_is_tuple=True)
+            self.cell_fn = lambda x: tf.contrib.rnn.BasicLSTMCell(x, state_is_tuple=True)
         elif self.cell_type == 'gru':
-            self.cell_fn = tf.nn.rnn_cell.GRUCell
+            # self.cell_fn = tf.nn.rnn_cell.GRUCell
+            self.cell_fn = tf.contrib.rnn.GRUCell
 
         self._create_placeholders()
         self._logger.info("Created placeholders.")
@@ -77,12 +79,12 @@ class SkipthoughtModel:
             b = tf.get_variable("proj_b", [self.max_vocab_size])
             output_projection = (w, b)
 
-            decoder_outputs, _ = tf.nn.seq2seq.rnn_decoder(embedded_prev, initial_state=encoder_state,
-                                                           cell=cell)
+            decoder_outputs, _ = tf.contrib.legacy_seq2seq.rnn_decoder(embedded_prev, initial_state=encoder_state, cell=cell)
 
-        loop_function_predict = tf.nn.seq2seq._extract_argmax_and_embed(self.embedding_matrix, output_projection=(w, b), update_embedding=False)
+        from tensorflow.contrib.legacy_seq2seq.python.ops.seq2seq import _extract_argmax_and_embed
+        loop_function_predict = _extract_argmax_and_embed(self.embedding_matrix, output_projection=(w, b), update_embedding=False)
         with tf.variable_scope(scope_name, reuse=True):
-            decoder_predict_hiddens, _ = tf.nn.seq2seq.rnn_decoder(embedded_prev, initial_state=encoder_state,
+            decoder_predict_hiddens, _ = tf.contrib.legacy_seq2seq.rnn_decoder(embedded_prev, initial_state=encoder_state,
                                                                        cell=cell, loop_function=loop_function_predict)
 
             decoder_predict_logits = [tf.nn.xw_plus_b(x, w, b) for x in decoder_predict_hiddens]
@@ -158,18 +160,19 @@ class SkipthoughtModel:
                 local_w_t = tf.cast(w_t, tf.float32)
                 local_b = tf.cast(b, tf.float32)
                 local_inputs = tf.cast(inputs, tf.float32)
-                return tf.nn.sampled_softmax_loss(local_w_t, local_b, local_inputs, labels,
+                # return tf.nn.sampled_softmax_loss(local_w_t, local_b, local_inputs, labels,
+                return tf.nn.sampled_softmax_loss(local_w_t, local_b, labels, local_inputs,
                                                   self.num_samples, self.max_vocab_size)
             return sampled_loss
 
         prev_sampled_loss = get_sampled_loss(*prev_decoder_output_proj)
         next_sampled_loss = get_sampled_loss(*next_decoder_output_proj)
-        loss_prev = tf.nn.seq2seq.sequence_loss(prev_decoder_outputs,
-                                                self.prev_decoder_target,
+        loss_prev = tf.contrib.legacy_seq2seq.sequence_loss(self.prev_decoder_target,
+                                                prev_decoder_outputs,
                                                 self.prev_decoder_weights,
                                                 softmax_loss_function=prev_sampled_loss)
-        loss_next = tf.nn.seq2seq.sequence_loss(next_decoder_outputs,
-                                                self.next_decoder_target,
+        loss_next = tf.contrib.legacy_seq2seq.sequence_loss(self.next_decoder_target,
+                                                next_decoder_outputs,
                                                 self.next_decoder_weights,
                                                 softmax_loss_function=next_sampled_loss)
         self.loss = loss_prev + loss_next
