@@ -2,7 +2,7 @@
 An implementation of skip-thought vectors in Tensorflow
 
 # Usage
-```python3
+```python
 from skipthought import SkipthoughtModel
 from skipthought.data_utils import TextData
 from skipthought.utils import seq2seq_triples_data_iterator
