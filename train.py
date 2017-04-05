@@ -89,9 +89,9 @@ def main(**kwargs):
                              kwargs['num_samples'], kwargs['max_len'])
 
     with tf.Session() as sess:
-        init = tf.initialize_all_variables()
+        init = tf.global_variables_initializer()
         sess.run(init)
-        saver = tf.train.Saver(tf.all_variables(), max_to_keep=20)
+        saver = tf.train.Saver(tf.global_variables(), max_to_keep=20)
 
         if kwargs['init_from'] is not None:
             saver.restore(sess, ckpt.model_checkpoint_path)
