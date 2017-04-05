@@ -69,6 +69,8 @@ def main(**kwargs):
         textdata = TextData(kwargs['data_path'], max_len=kwargs['max_len'], max_vocab_size=kwargs['max_vocab_size'])
 
     logger.info("Save config and textdata.")
+    if not os.path.exists(kwargs['save_dir']):
+        os.makedirs(kwargs['save_dir'])
     with open(os.path.join(kwargs['save_dir'], 'config.pkl'), 'wb') as f:
         dill.dump(kwargs, f)
     TextData.save(textdata, os.path.join(kwargs['save_dir'], 'textdata.pkl'))
