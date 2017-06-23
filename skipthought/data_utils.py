@@ -97,6 +97,7 @@ class Vocab:
             index = len(self.word2index)
             self.word2index[word] = index
             self.index2word[index] = word
+            self.word_freq[word] = 0
         self.word_freq[word] += count
 
     def add_words(self, words):
