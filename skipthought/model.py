@@ -44,3 +44,27 @@ class SkipThoughtModel:
             with tf.variable_scope('next_decoder'):
                 self._next_decoder = Decoder(self._num_units, self._encoder.final_lstm_state,
                                              self._pad_idx, self._eos_idx, self._embedding_matrix)
+
+    @property
+    def embedding_matrix(self):
+        return self._embedding_matrix
+
+    @property
+    def encoder(self):
+        return self._encoder
+
+    @property
+    def decoders(self):
+        return [self._prev_decoder, self._next_decoder]
+
+    @property
+    def prev_decoder(self):
+        return self._prev_decoder
+
+    @property
+    def next_decoder(self):
+        return self._next_decoder
+
+    def train(self, sess, batch):
+        pass
+

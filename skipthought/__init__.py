@@ -1,1 +1,1 @@
-from .model import SkipthoughtModel
+from skipthought.model import SkipThoughtModel
