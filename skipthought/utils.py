@@ -38,22 +38,6 @@ def pad_sequences(data, max_length, pad_value):
     return np.array(data)
 
 
-def seq_loss_weights(data, pad_value, dtype=np.float32):
-    """
-    Obtain weights for TensorFlow sequence loss.
-
-    Args:
-        data (numpy.array): Array with padded sentences.
-        pad_value (int): Padding value.
-        dtype (numpy.dtype): Weights type.
-
-    Returns:
-        object (numpy.array): Array shaped like `data`.
-    """
-    mask = (data != pad_value).astype(dtype)
-    return mask
-
-
 def prepare_inputs_for_decoder(inputs, inputs_length, eos_token):
     """
     Take placeholder with padded _inputs and create decoder_inputs (prepended with eos)

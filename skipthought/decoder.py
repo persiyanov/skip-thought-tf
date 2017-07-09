@@ -24,31 +24,22 @@ class Decoder:
 
     """
 
-    def __init__(self, num_units, initial_state, embedding_size, num_tokens, pad_idx, eos_idx, embedding_matrix=None):
+    def __init__(self, num_units, initial_state, pad_idx, eos_idx, embedding_matrix):
         """
         Args:
             num_units (int): Hidden state size in rnn cell.
             initial_state (LSTMStateTuple): Decoder cell initializer.
-            embedding_size (int): Embedding size.
-            num_tokens (int): Vocabulary size.
             pad_idx (int): Padding token index in vocabulary.
             eos_idx (int): End-of-sequence token index in vocabulary.
-            embedding_matrix (tf.Variable, optional): Pretrained embedding_matrix created with utils.create_embeddings_matrix.
+            embedding_matrix (tf.Variable): Variable which holds embedding matrix.
         """
         self._num_units = num_units
         self._decoder_initial_state = initial_state
-        self._embedding_size = embedding_size
-        self._num_tokens = num_tokens
         self._pad_idx = pad_idx
         self._eos_idx = eos_idx
         self._embedding_matrix = embedding_matrix
 
-        if embedding_matrix is not None and embedding_matrix.shape != (num_tokens, embedding_size):
-            shape = embedding_matrix.shape
-            raise ValueError("embedding_matrix must have shape=[{}, {}], you passed [{}, {}]".format(num_tokens,
-                                                                                                     embedding_size,
-                                                                                                     shape[0],
-                                                                                                     shape[1]))
+        self._num_tokens, self._embedding_size = self._embedding_matrix.shape.as_list()
 
         self._build()
 
@@ -57,9 +48,6 @@ class Decoder:
         self._sequence_length = tf.reduce_sum(tf.to_int32(tf.not_equal(self._inputs, self._pad_idx)), axis=1)
 
         with tf.variable_scope('decoder'):
-            if self._embedding_matrix is None:
-                self._embedding_matrix = create_embeddings_matrix(self._num_tokens, self._embedding_size)
-
             res = prepare_inputs_for_decoder(self._inputs, self._sequence_length, self._eos_idx)
             self._decoder_inputs, self._decoder_targets, self._decoder_seq_length = res
 

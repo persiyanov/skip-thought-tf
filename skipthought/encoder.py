@@ -3,8 +3,6 @@ from __future__ import print_function
 
 import tensorflow as tf
 
-from skipthought.utils import create_embeddings_matrix
-
 
 class Encoder:
     """Class which implements RNN encoder. It uses tf.contrib.rnn.LSTMBlockFusedCell for speedup.
@@ -15,27 +13,19 @@ class Encoder:
     # TODO: several layers.
 
     """
-    def __init__(self, num_units, embedding_size, num_tokens, pad_idx, embedding_matrix=None):
+    def __init__(self, num_units, pad_idx, embedding_matrix):
         """
         Args:
             num_units (int): Hidden state size in rnn cell.
-            embedding_size (int): Embedding size.
-            num_tokens (int): Vocabulary size.
             pad_idx (int): Padding token index in vocabulary.
-            embedding_matrix (tf.Variable, optional): Pretrained embedding_matrix created with utils.create_embeddings_matrix.
+            embedding_matrix (tf.Variable): Variable which holds embedding matrix.
         """
         self._num_units = num_units
-        self._embedding_size = embedding_size
-        self._num_tokens = num_tokens
         self._pad_idx = pad_idx
         self._embedding_matrix = embedding_matrix
 
-        if embedding_matrix is not None and embedding_matrix.shape.as_list() != [num_tokens, embedding_size]:
-            shape = embedding_matrix.shape.as_list()
-            raise ValueError("embedding_matrix must have shape=[{}, {}], you passed [{}, {}]".format(num_tokens,
-                                                                                                     embedding_size,
-                                                                                                     shape[0],
-                                                                                                     shape[1]))
+        self._num_tokens, self._embedding_size = self._embedding_matrix.shape.as_list()
+
         self._build()
 
     def _build(self):
@@ -43,9 +33,6 @@ class Encoder:
         self._sequence_length = tf.reduce_sum(tf.to_int32(tf.not_equal(self._inputs, self._pad_idx)), axis=1)
 
         with tf.variable_scope('encoder'):
-            if self._embedding_matrix is None:
-                self._embedding_matrix = create_embeddings_matrix(self._num_tokens, self._embedding_size)
-
             cell_input = tf.nn.embedding_lookup(self._embedding_matrix, ids=self._inputs)
 
             # Swap axis to [time, batch, embedding_size] in order to pass cell_input to fused lstm cell.
