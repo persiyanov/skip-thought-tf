@@ -6,48 +6,6 @@ from collections import defaultdict
 from skipthought import utils
 
 
-class Batch:
-    def __init__(self, data, pad_value, go_value, eos_value):
-        """Class which creates batch from data and could be passed into
-        SkipthoughtModel._fill_feed_dict_* methods.
-
-        For encoder batches, `seq_lengths` field is used in order to fill feed_dict.
-        For decoder batches, `weights` field is used in order to fill feed_dict.
-        (See SkipthoughtModel code)
-
-        Args:
-            data (np.array): Encoded and padded batch.
-            pad_value (int): <pad> token index.
-            go_value (int): <go> token index.
-            eos_value (int): <eos> token index.
-        """
-        self.data = data
-        self.pad_value = pad_value
-        self.go_value = go_value
-        self.eos_value = eos_value
-
-        self._weights = utils.seq_loss_weights(self.data, self.pad_value)
-        self._seq_lengths = utils.sequence_lengths(self.data, self.pad_value)
-
-    def __getitem__(self, item):
-        return self.data[item]
-
-    def __repr__(self):
-        return self.data.__repr__()
-
-    @property
-    def weights(self):
-        return self._weights
-
-    @property
-    def seq_lengths(self):
-        return self._seq_lengths
-
-    @property
-    def shape(self):
-        return self.data.shape
-
-
 class Vocab:
     EOS_TOKEN = "<eos>"
     PAD_TOKEN = "<pad>"
@@ -295,7 +253,7 @@ class TextData:
 
         Args:
             curr_data (list of lists of ints): List with raw lines which corresponds to current sentences.
-                Lines can be with different lengths. They will be encoder inputs.
+                Lines can be with different lengths. They will be encoder _inputs.
             prev_data (list of lists of ints): List with raw previous
                 lines. Lines can be with different lengths.
             next_data (list of lists of ints): List with raw next lines.
