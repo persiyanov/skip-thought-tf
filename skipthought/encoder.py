@@ -6,12 +6,6 @@ import tensorflow as tf
 
 class Encoder:
     """Class which implements RNN encoder. It uses tf.contrib.rnn.LSTMBlockFusedCell for speedup.
-
-
-    # TODO: different cell types.
-    # TODO: freeze embedding matrix.
-    # TODO: several layers.
-
     """
     def __init__(self, num_units, pad_idx, embedding_matrix):
         """
@@ -74,12 +68,6 @@ class Encoder:
         """Final LSTMStateTuple (after processing input sequence).
         """
         return self._final_state
-
-    def encode_fn(self, sess):
-        """Make a callable function which takes input batch [batch_size, time]
-        of word ids and returns final hidden state as numpy-array.
-        """
-        return sess.make_callable(self.final_hidden, feed_list=[self._inputs])
 
     def encode(self, sess, inputs):
         """Run session on _inputs (numpy-array [batch, time] of word ids) and return rnn final hidden state.

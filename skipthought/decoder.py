@@ -5,7 +5,7 @@ import collections
 import tensorflow as tf
 from tensorflow.python.layers.core import Dense
 
-from skipthought.utils import prepare_inputs_for_decoder, create_embeddings_matrix
+from skipthought.utils import prepare_inputs_for_decoder
 
 
 class DecoderOutput(collections.namedtuple("DecoderOutput", ("logits", "sample_ids", "sequence_length"))):
@@ -16,11 +16,10 @@ class Decoder:
     """Class which implements RNN decoder in SkipThoughtModel.
 
     Notes:
-        Decoder does not use <GO> token. Instead, it uses <EOS> token as first input (see start_tokens in _build()).
+        1. Decoder does not use <GO> token. Instead, it uses <EOS> token as first input (see start_tokens in _build()).
         These schemes are equivalent, but ours use one token less =)
 
-    # TODO: layer norm cell.
-    # TODO: different cell types
+        2. You only need to pass decoder inputs for training. Targets are computed automatically.
 
     """
 
@@ -49,11 +48,13 @@ class Decoder:
 
     def _build(self):
         self._inputs = tf.placeholder(tf.int32, shape=[None, None], name='decoder_inputs')
-        self._sequence_length = tf.reduce_sum(tf.to_int32(tf.not_equal(self._inputs, self._pad_idx)), axis=1)
+        sequence_length = tf.reduce_sum(tf.to_int32(tf.not_equal(self._inputs, self._pad_idx)), axis=1)
 
         with tf.variable_scope('decoder'):
-            res = prepare_inputs_for_decoder(self._inputs, self._sequence_length, self._eos_idx)
-            self._decoder_inputs, self._decoder_targets, self._decoder_seq_length = res
+            self._decoder_inputs, self._decoder_targets, self._decoder_seq_length = \
+                prepare_inputs_for_decoder(self._inputs, sequence_length, self._eos_idx)
+
+            # TRAINING DECODER ###
 
             # Build training decoder.
             # Embed input tokens.
@@ -81,6 +82,8 @@ class Decoder:
             self._training_output = DecoderOutput(logits=decoded[0].rnn_output, sample_ids=decoded[0].sample_id,
                                                   sequence_length=decoded[2])
 
+            # INFERENCE DECODER ###
+
             # Build inference decoder which decodes greedily.
             start_tokens = tf.ones([tf.shape(self._decoder_inputs)[0]], dtype=tf.int32) * self._eos_idx
 
@@ -98,18 +101,33 @@ class Decoder:
                                                    sequence_length=decoded[2])
 
     @property
+    def inputs(self):
+        """Decoder inputs placeholder. Targets are computed automatically within TF.
+        """
+        return self._inputs
+
+    @property
+    def seqlen(self):
+        """Int32 Tensor with shape [batch_size,] representing inputs lengths.
+        """
+        return self._decoder_seq_length
+
+    @property
+    def targets(self):
+        """Decoder targets which are computed using `inputs` placeholder.
+        """
+        return self._decoder_targets
+
+    @property
     def embedding_matrix(self):
         """tf.Variable which holds current embedding matrix tensor.
         """
         return self._embedding_matrix
 
     @property
-    def training_output(self):
+    def toutput(self):
         return self._training_output
 
     @property
-    def inference_output(self):
+    def ioutput(self):
         return self._inference_output
-
-    def decode(self):
-        pass
