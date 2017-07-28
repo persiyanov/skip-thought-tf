@@ -4,23 +4,6 @@ import numpy as np
 import tensorflow as tf
 
 
-def sequence_lengths(data, pad_value):
-    """
-    Return array with length of sequences. It is useful for TensorFlow RNN
-    models.
-
-    Args:
-        data (numpy.array): Array with sequence word indices aligned with pad_value.
-        pad_value (int): Value used for padding sequences.
-
-    Returns:
-        res (numpy.array): 1D array with sequence lengths.
-    """
-    assert data.ndim == 2, data
-    res = np.sum((data != pad_value).astype(np.int32), axis=1)
-    return res
-
-
 def pad_sequences(data, max_length, pad_value):
     """
     Pad sequence of indices with pad values to the length of max_length.
@@ -50,6 +33,10 @@ def prepare_inputs_for_decoder(inputs, inputs_length, eos_token):
 
     Returns:
         (decoder_inputs, decoder_targets, targets_length)
+
+    Notes:
+        This function is inefficient because of two `tf.reverse_sequence` calls. If you know the better way how to
+        append eos token at the end of sequence, please send pull request or write to persiyanov@phystech.edu.
 
     """
     batch_size = tf.shape(inputs)[0]
