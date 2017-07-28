@@ -1,4 +1,5 @@
 from __future__ import unicode_literals
+from __future__ import division
 
 import pickle
 
@@ -25,12 +26,13 @@ class Vocab:
     EOS_TOKEN = "<eos>"
     PAD_TOKEN = "<pad>"
     UNK_TOKEN = "<unk>"
+    _SPEC_TOKENS = {EOS_TOKEN, PAD_TOKEN, UNK_TOKEN}
 
     def __init__(self):
         self._token2index = {}
         self._index2token = {}
         self._token_freq = defaultdict(int)
-        self.add_tokens([self.EOS_TOKEN, self.PAD_TOKEN, self.UNK_TOKEN])
+        self.add_tokens(self._SPEC_TOKENS)
 
     @property
     def eos_idx(self):
@@ -43,6 +45,10 @@ class Vocab:
     @property
     def n_tokens(self):
         return len(self._token2index)
+
+    @property
+    def tokens(self):
+        return self._token2index.keys()
 
     def add_tokens(self, tokens):
         map(self.add_token, tokens)
@@ -85,7 +91,11 @@ class Vocab:
             min_count (int): The threshold for removing rare tokens. Tokens which frequency is less than `min_count`
                 are removed from vocabulary.
         """
-        raise NotImplementedError
+        for token in self.tokens:
+            if token not in self._SPEC_TOKENS and self._token_freq[token] < min_count:
+                self._token_freq.pop(token)
+                token_idx = self._token2index.pop(token)
+                self._index2token.pop(token_idx)
 
     def save(self, save_to):
         """Dump vocabulary to `save_to` for future usage.
@@ -104,6 +114,12 @@ class Vocab:
         with open(load_from, 'rb') as fin:
             d = pickle.load(fin)
         self._token2index, self._index2token, self._token_freq = d['t2i'], d['i2t'], d['tfreq']
+
+    @staticmethod
+    def from_file(load_from):
+        vocab = Vocab()
+        vocab.load(load_from)
+        return vocab
 
 
 def make_batch(vocab, lines, processing_fn=lambda x: x.strip()):
@@ -124,3 +140,11 @@ def make_batch(vocab, lines, processing_fn=lambda x: x.strip()):
         lines_token_idxs.append(token_idxs)
 
     return utils.pad_sequences(lines_token_idxs, max_len, vocab.pad_idx)
+
+
+def iterate_batches(batch_size, vocab, lines, processing_fn=lambda x: x.strip()):
+    total_batches = len(lines)//batch_size
+
+    for n_batch in range(total_batches):
+        batch_lines = lines[n_batch*batch_size:(n_batch+1)*batch_size]
+        yield make_batch(vocab, batch_lines, processing_fn)

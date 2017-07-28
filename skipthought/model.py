@@ -39,7 +39,7 @@ class SkipThoughtModel:
         1. You don't need to append/prepend your data with eos/go tokens. You only have to pad sequences.
             Everything else is computed within TF.
 
-        2. For creating padded batches you may use `data.make_batch()` function.
+        2. For creating padded batches you may use `data.make_batch()` or `data.iterate_batches()` functions.
 
 
 
