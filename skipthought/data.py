@@ -1,5 +1,7 @@
 from __future__ import unicode_literals
 
+import pickle
+
 from collections import defaultdict
 from skipthought import utils
 
@@ -28,7 +30,6 @@ class Vocab:
         self._token2index = {}
         self._index2token = {}
         self._token_freq = defaultdict(int)
-        self._n_tokens = 0
         self.add_tokens([self.EOS_TOKEN, self.PAD_TOKEN, self.UNK_TOKEN])
 
     @property
@@ -41,7 +42,7 @@ class Vocab:
 
     @property
     def n_tokens(self):
-        return self._n_tokens
+        return len(self._token2index)
 
     def add_tokens(self, tokens):
         map(self.add_token, tokens)
@@ -50,7 +51,6 @@ class Vocab:
         if token not in self:
             self._token2index[token] = self.n_tokens
             self._index2token[self.n_tokens] = token
-            self._n_tokens += 1
         self._token_freq[token] += 1
 
     def update_from_lines(self, lines, processing_fn=lambda x: x.strip()):
@@ -90,12 +90,20 @@ class Vocab:
     def save(self, save_to):
         """Dump vocabulary to `save_to` for future usage.
         """
-        raise NotImplementedError
+        d = {
+            't2i': self._token2index,
+            'i2t': self._index2token,
+            'tfreq': self._token_freq
+        }
+        with open(save_to, 'wb') as fout:
+            pickle.dump(d, fout)
 
     def load(self, load_from):
         """Load previously saved vocabulary.
         """
-        raise NotImplementedError
+        with open(load_from, 'rb') as fin:
+            d = pickle.load(fin)
+        self._token2index, self._index2token, self._token_freq = d['t2i'], d['i2t'], d['tfreq']
 
 
 def make_batch(vocab, lines, processing_fn=lambda x: x.strip()):
